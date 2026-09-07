@@ -1,0 +1,52 @@
+name: FTP Deploy
+
+on:
+  push:
+    branches:
+      - master
+      - produccion
+      - test
+      - 'feature/**'
+  workflow_dispatch: # Permite ejecución manual desde la pestaña Actions en GitHub
+
+jobs:
+  deploy:
+    name: Despliegue FTP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Descargar código del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Optimiza la detección de cambios para la acción de FTP
+
+      - name: 📂 Determinar carpeta de destino FTP según la rama
+        id: set-target-dir
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "Rama detectada: $BRANCH"
+
+          if [ "$BRANCH" = "test" ]; then
+            # La rama 'test' se guarda en la carpeta prod
+            TARGET_DIR="./prod/"
+          elif [[ "$BRANCH" == feature/* ]]; then
+            # Las ramas 'feature/*' se guardan en la carpeta test
+            TARGET_DIR="./test/"
+          elif [ "$BRANCH" = "master" ] || [ "$BRANCH" = "produccion" ]; then
+            # master y produccion se despliegan en la raíz
+            TARGET_DIR="./"
+          else
+            TARGET_DIR="./"
+          fi
+
+          echo "Carpeta destino calculada: $TARGET_DIR"
+          echo "target_dir=$TARGET_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 Sincronizar archivos por FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ steps.set-target-dir.outputs.target_dir }}
+          # dangerous-clean-slate: false # Opcional: no borra archivos remotos que no estén en el repo
